@@ -1,0 +1,72 @@
+/* src/App.css */
+:root {
+    --primary-color: #6c5ce7;
+    --primary-light: #a29bfe;
+    --primary-dark: #5441e0;
+    --secondary-color: #2ecc71;
+    --accent-color: #ff7675;
+    --background-color: #f8f9fa;
+    --card-color: #ffffff;
+    --text-color: #2d3436;
+    --text-secondary: #636e72;
+    --border-color: #dfe6e9;
+    --success-color: #00b894;
+    --warning-color: #fdcb6e;
+    --error-color: #d63031;
+    --border-radius: 8px;
+    --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --transition: all 0.3s ease;
+  }
+  
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+  }
+  
+  .app-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  
+  /* Header Styles */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 40px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .logo h1 {
+    color: var(--primary-color);
+    font-size: 28px;
+    margin-bottom: 4px;
+    font-weight: 700;
+  }
+  
+  .logo p {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  
+  .wallet-info {
+    display: flex;
+    align-items: center;
+  }
+  
+  .wallet-connected {
+    display: flex;
+    align-items: center;
+    background-color: var(--card-color);
+    padding: 10px 16px;
+  }
