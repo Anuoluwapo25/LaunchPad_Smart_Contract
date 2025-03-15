@@ -242,7 +242,10 @@ function Home() {
           className={`w-full p-2 rounded font-medium ${
             isLoading ? "bg-gray-400" : isValidInput ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-gray-300"
           }`}
-          onClick={deployToken}
+          onClick={async () => {
+            const result = await deployToken();
+            console.log("deployToken returned:", result);
+          }}
           disabled={isLoading || !isValidInput}
         >
           {isWriteLoading ? "Submitting Transaction..." : isConfirming ? "Waiting for Confirmation..." : "Deploy Token"}
