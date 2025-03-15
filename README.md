@@ -42,8 +42,8 @@ The Token Factory consists of multiple Solidity contracts:
 1. Clone this repository or copy the contract code:
 
 ```bash
-git clone https://github.com/yourusername/token-factory.git
-cd token-factory
+git clone https://github.com/Anuoluwapo25/LaunchPad_Smart_Contract
+cd LaunchPad_Smart_Contract
 ```
 
 2. Install dependencies:
