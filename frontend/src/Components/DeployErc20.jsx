@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
 import { ethers } from "ethers";
 import FactoryABI from "../abis/FactoryABI.json";
 import "./DeployErc20.css";
+import toast from "react-hot-toast";
 
 const FACTORY_ADDRESS = "0x981A4465A74D467dDd3F28308B255de98F157d72";
 
@@ -14,16 +15,17 @@ function Home() {
   const [error, setError] = useState("");
   const [deployedTokenAddress, setDeployedTokenAddress] = useState("");
   const [totalSupply, setTotalSupply] = useState(BigInt(0));
-  const [tokenDeployedEventSignature, setTokenDeployedEventSignature] = useState("");
+  
+  const hasGetAllTokens = FactoryABI.abi.some(item => 
+    item.type === "function" && item.name === "getAllTokens"
+  );
 
-  // Calculate event signature on component mount
-  useEffect(() => {
-    // Get the event signature using ethers.js
-    // This calculates the keccak256 hash of "TokenDeployed(address,string,string)"
-    const signature = ethers.id("TokenDeployed(address,string,string)");
-    setTokenDeployedEventSignature(signature);
-    console.log("Calculated TokenDeployed event signature:", signature);
-  }, []);
+  const { data: userTokens, refetch: fetchUserTokens } = useReadContract({
+    address: FACTORY_ADDRESS,
+    abi: FactoryABI.abi,
+    functionName: "getAllTokens",
+    enabled: hasGetAllTokens
+  });
 
   const handleSupplyChange = (value) => {
     if (/^\d*$/.test(value)) {
@@ -43,77 +45,54 @@ function Home() {
 
   const { isLoading: isConfirming, isSuccess: isConfirmed, error: confirmError } = useWaitForTransactionReceipt({
     hash: txData,
-    onSuccess: (receipt) => {
+    onSuccess: async (receipt) => {
       try {
         console.log("Transaction receipt:", receipt);
-        console.log("All logs:", receipt.logs);
-        console.log("Factory address:", FACTORY_ADDRESS.toLowerCase());
-        console.log("Using event signature:", tokenDeployedEventSignature);
         
-        // Method 1: Try to find the event using the calculated signature
-        const tokenDeployedEvent = receipt?.logs?.find(
+        if (hasGetAllTokens) {
+          await fetchUserTokens();
+          if (userTokens && Array.isArray(userTokens)) {
+            const tokens = userTokens;
+            const userToken = tokens.find(token => 
+              token.creator && token.creator.toLowerCase() === address.toLowerCase()
+            );
+            
+            if (userToken && userToken.tokenAddress) {
+              setDeployedTokenAddress(userToken.tokenAddress);
+              console.log("Found token address from getAllTokens:", userToken.tokenAddress);
+              return;
+            }
+          }
+        }
+        
+        if (receipt.contractAddress) {
+          console.log("Found contract address from creation:", receipt.contractAddress);
+          setDeployedTokenAddress(receipt.contractAddress);
+          return;
+        }
+        
+        const tokenDeployedSignature = ethers.id("TokenDeployed(address,string,string)");
+        const tokenCreatedSignature = ethers.id("TokenCreated(address,address,string,string)");
+        
+        const tokenEvent = receipt?.logs?.find(
           (log) =>
             log.address?.toLowerCase() === FACTORY_ADDRESS.toLowerCase() &&
             log.topics &&
-            log.topics[0] === tokenDeployedEventSignature
+            (log.topics[0] === tokenDeployedSignature || log.topics[0] === tokenCreatedSignature)
         );
         
-        console.log("Found token deployed event with signature?", !!tokenDeployedEvent);
-        
-        if (tokenDeployedEvent) {
-          console.log("Token deployed event data:", tokenDeployedEvent);
-          // If the address is in the topics (indexed parameter)
-          if (tokenDeployedEvent.topics && tokenDeployedEvent.topics.length > 1) {
-            const tokenAddress = `0x${tokenDeployedEvent.topics[1].slice(-40)}`;
+        if (tokenEvent) {
+          console.log("Found token event:", tokenEvent);
+          if (tokenEvent.topics && tokenEvent.topics.length > 1) {
+            const tokenAddress = `0x${tokenEvent.topics[1].slice(-40)}`;
             setDeployedTokenAddress(tokenAddress);
-          } 
-          // If the address is in the data (non-indexed parameter)
-          else if (tokenDeployedEvent.data && tokenDeployedEvent.data.length >= 42) {
-            const tokenAddress = `0x${tokenDeployedEvent.data.slice(-40)}`;
+          } else if (tokenEvent.data) {
+            const tokenAddress = `0x${tokenEvent.data.slice(26, 66)}`;
             setDeployedTokenAddress(tokenAddress);
           }
         } else {
-          console.log("Trying fallback method...");
-          // Method 2: Find any event from the factory contract as fallback
-          const factoryEvents = receipt.logs.filter(
-            log => log.address?.toLowerCase() === FACTORY_ADDRESS.toLowerCase()
-          );
-          
-          console.log("Factory events:", factoryEvents);
-          
-          if (factoryEvents.length > 0) {
-            const lastEvent = factoryEvents[factoryEvents.length - 1];
-            console.log("Using last factory event:", lastEvent);
-            
-            // Extract from data if it contains an address
-            if (lastEvent.data && lastEvent.data.length >= 42) {
-              // Parse data - we need to extract the token address from the encoded data
-              // This is tricky without knowing the exact encoding, but we'll attempt
-              // For a non-indexed address parameter, the last 20 bytes should be the address
-              const tokenAddress = `0x${lastEvent.data.slice(-40)}`;
-              console.log("Extracted token address from data:", tokenAddress);
-              setDeployedTokenAddress(tokenAddress);
-            } 
-            // Try to extract from topics if available
-            else if (lastEvent.topics && lastEvent.topics.length > 1) {
-              const tokenAddress = `0x${lastEvent.topics[1].slice(-40)}`;
-              console.log("Extracted token address from topics:", tokenAddress);
-              setDeployedTokenAddress(tokenAddress);
-            }
-            // Last resort - look for contract creation in logs
-            else {
-              console.log("Looking for contract creation in transaction...");
-              // If this is a contract creation transaction, try to extract the created contract address
-              if (receipt.contractAddress) {
-                console.log("Found contract address from creation:", receipt.contractAddress);
-                setDeployedTokenAddress(receipt.contractAddress);
-              } else {
-                console.warn("Couldn't extract token address from events");
-              }
-            }
-          } else {
-            console.warn("No events from factory contract found in transaction logs");
-          }
+          console.warn("Could not find token address from transaction logs");
+          toast.error("Transaction succeeded but couldn't get token address. Check your wallet for the new token.");
         }
       } catch (e) {
         console.error("Error processing receipt:", e);
@@ -128,6 +107,7 @@ function Home() {
     (writeError && `Write error: ${writeError.message}`) ||
     (confirmError && `Confirmation error: ${confirmError.message}`);
 
+  // Deploy token function
   const deployToken = async () => {
     if (!isConnected) {
       setError("Connect your wallet first");
@@ -140,15 +120,60 @@ function Home() {
     setError("");
     setDeployedTokenAddress("");
     try {
-      writeContract({
-        address: FACTORY_ADDRESS,
-        abi: FactoryABI.abi,
-        functionName: "createToken",
-        args: [tokenName, symbol, totalSupply],
-      });
+      // Check if the factory supports decimals (like your friend's code)
+      const hasDecimals = FactoryABI.abi.some(item => 
+        item.type === "function" && 
+        item.name === "createToken" && 
+        item.inputs.some(input => input.name === "decimals")
+      );
+      
+      if (hasDecimals) {
+        // Use the version with decimals (like your friend's contract)
+        writeContract({
+          address: FACTORY_ADDRESS,
+          abi: FactoryABI.abi,
+          functionName: "createToken",
+          args: [tokenName, symbol, 18, totalSupply, address],
+        });
+      } else {
+        // Use the simpler version (like your contract)
+        writeContract({
+          address: FACTORY_ADDRESS,
+          abi: FactoryABI.abi,
+          functionName: "createToken",
+          args: [tokenName, symbol, totalSupply],
+        });
+      }
     } catch (e) {
       console.error("Error submitting transaction:", e);
       setError(`Transaction error: ${e.message}`);
+    }
+  };
+
+  // Add to wallet function
+  const addTokenToWallet = async () => {
+    if (!deployedTokenAddress) return;
+    
+    try {
+      // @ts-ignore
+      const provider = window.ethereum;
+      if (provider) {
+        await provider.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: deployedTokenAddress,
+              symbol: symbol,
+              decimals: 18,
+              image: '', // Add a token image URL if available
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Error adding token to wallet:', error);
+      toast.error('Failed to add token to wallet');
     }
   };
 
@@ -195,16 +220,22 @@ function Home() {
           <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded">
             <p className="font-medium">Token deployed successfully!</p>
             <p className="text-sm font-mono break-all">Address: {deployedTokenAddress}</p>
-            <p className="text-sm mt-1">
+            <div className="flex space-x-2 mt-2">
               <a
                 href={`https://sepolia.etherscan.io/token/${deployedTokenAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
+                className="text-blue-600 hover:underline text-sm"
               >
                 View on Etherscan →
               </a>
-            </p>
+              <button
+                onClick={addTokenToWallet}
+                className="text-blue-600 hover:underline text-sm"
+              >
+                Add to Wallet
+              </button>
+            </div>
           </div>
         )}
         <button
